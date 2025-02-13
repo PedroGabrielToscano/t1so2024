@@ -1,0 +1,109 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+import java.net.*;
+
+public class Producer extends JFrame {
+    private JButton startButton;
+    private JButton stopButton;
+    private JTextArea logArea;
+    private volatile boolean running = false;
+    private Socket socket;
+    private BufferedWriter out;
+    private Thread producerThread;
+
+    public Producer() {
+        setTitle("Produtor");
+        setSize(400, 300);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        startButton = new JButton("Iniciar Produção");
+        stopButton = new JButton("Parar Produção");
+        stopButton.setEnabled(false);
+
+        JPanel panel = new JPanel();
+        panel.add(startButton);
+        panel.add(stopButton);
+        add(panel, BorderLayout.NORTH);
+
+        logArea = new JTextArea();
+        logArea.setEditable(false);
+        add(new JScrollPane(logArea), BorderLayout.CENTER);
+
+        startButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                startProduction();
+            }
+        });
+
+        stopButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                stopProduction();
+            }
+        });
+
+        setVisible(true);
+    }
+
+    private void startProduction() {
+        try {
+            socket = new Socket("localhost", 5000);
+            out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+            running = true;
+            producerThread = new Thread(new Runnable() {
+                public void run() {
+                    int count = 0;
+                    while (running) {
+                        try {
+                            String message = "Item " + count++;
+                            out.write(message);
+                            out.newLine();
+                            out.flush();
+                            logArea.append("Produzido: " + message + "\n");
+                            Thread.sleep(1000);
+                        } catch (IOException e) {
+                            logArea.append("Erro ao enviar mensagem: " + e.getMessage() + "\n");
+                            running = false; // Interrompe o loop se ocorrer um erro de E/S
+                        } catch (InterruptedException e) {
+                            break;
+                        }
+                    }
+                }
+            });
+            producerThread.start();
+            startButton.setEnabled(false);
+            stopButton.setEnabled(true);
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Não foi possível conectar ao consumidor.", "Erro", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void stopProduction() {
+        running = false;
+        try {
+            if (producerThread != null) {
+                producerThread.interrupt();
+                producerThread = null;
+            }
+            if (out != null) {
+                out.close();
+                out = null;
+            }
+            if (socket != null) {
+                socket.close();
+                socket = null;
+            }
+            logArea.append("Produção parada.\n");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        startButton.setEnabled(true);
+        stopButton.setEnabled(false);
+    }
+
+    public static void main(String[] args) {
+        new Producer();
+    }
+}

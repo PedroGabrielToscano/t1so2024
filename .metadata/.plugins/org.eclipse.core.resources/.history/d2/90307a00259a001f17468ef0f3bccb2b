@@ -1,0 +1,34 @@
+public class Buffer {
+    private int[] buffer;
+    private int count, in, out;
+    private int size;
+
+    public Buffer(int size) {
+        this.size = size;
+        buffer = new int[size];
+        count = in = out = 0;
+    }
+
+    public synchronized void produzir(int valor) throws InterruptedException {
+        while (count == size) {
+            wait();
+        }
+        buffer[in] = valor;
+        in = (in + 1) % size;
+        count++;
+        System.out.println("Produziu: " + valor);
+        notifyAll();
+    }
+
+    public synchronized int consumir() throws InterruptedException {
+        while (count == 0) {
+            wait();
+        }
+        int valor = buffer[out];
+        out = (out + 1) % size;
+        count--;
+        System.out.println("Consumiu: " + valor);
+        notifyAll();
+        return valor;
+    }
+}

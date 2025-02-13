@@ -1,0 +1,282 @@
+package projeto;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+
+public class BoundedBuffer {
+    private final int[] buffer;
+    private int count, in, out;
+    private final int size;
+
+    public BoundedBuffer(int size) {
+        this.size = size;
+        buffer = new int[size];
+        count = in = out = 0;
+    }
+
+    public synchronized void produce(int item) throws InterruptedException {
+        while (count == size) {
+            wait();
+        }
+        buffer[in] = item;
+        in = (in + 1) % size;
+        count++;
+        notifyAll();
+    }
+
+    public synchronized int consume() throws InterruptedException {
+        while (count == 0) {
+            wait();
+        }
+        int item = buffer[out];
+        out = (out + 1) % size;
+        count--;
+        notifyAll();
+        return item;
+    }
+
+    public synchronized int[] getBufferState() {
+        int[] currentBuffer = new int[size];
+        int index = out;
+        for (int i = 0; i < count; i++) {
+            currentBuffer[i] = buffer[index];
+            index = (index + 1) % size;
+        }
+        return currentBuffer;
+    }
+
+    public synchronized int getCount() {
+        return count;
+    }
+
+    public int getSize() {
+        return size;
+    }
+}
+
+public class Producer implements Runnable {
+    private BoundedBuffer buffer;
+    private int speed; // em milissegundos
+    private boolean running = true;
+    private ProducerConsumerGUI gui;
+
+    public Producer(BoundedBuffer buffer, int speed, ProducerConsumerGUI gui) {
+        this.buffer = buffer;
+        this.speed = speed;
+        this.gui = gui;
+    }
+
+    public void run() {
+        int item = 0;
+        while (running) {
+            try {
+                Thread.sleep(speed);
+                buffer.produce(item++);
+                gui.refreshBufferDisplay();
+            } catch (InterruptedException e) {
+                running = false;
+            }
+        }
+    }
+
+    public void stop() {
+        running = false;
+    }
+}
+
+public class Consumer implements Runnable {
+    private BoundedBuffer buffer;
+    private int speed; // em milissegundos
+    private boolean running = true;
+    private ProducerConsumerGUI gui;
+
+    public Consumer(BoundedBuffer buffer, int speed, ProducerConsumerGUI gui) {
+        this.buffer = buffer;
+        this.speed = speed;
+        this.gui = gui;
+    }
+
+    public void run() {
+        while (running) {
+            try {
+                Thread.sleep(speed);
+                int item = buffer.consume();
+                gui.refreshBufferDisplay();
+            } catch (InterruptedException e) {
+                running = false;
+            }
+        }
+    }
+
+    public void stop() {
+        running = false;
+    }
+}
+
+public class ProducerConsumerGUI extends JFrame {
+
+    private BoundedBuffer buffer;
+    private Producer producer;
+    private Consumer consumer;
+    private Thread producerThread;
+    private Thread consumerThread;
+
+    private int bufferSize = 5;
+    private int producerSpeed = 1000; // milissegundos
+    private int consumerSpeed = 1000; // milissegundos
+
+    private JPanel bufferPanel;
+    private JLabel[] bufferSlots;
+    private JTextField bufferSizeField;
+    private JSlider producerSpeedSlider;
+    private JSlider consumerSpeedSlider;
+    private JButton startButton;
+    private JButton stopButton;
+
+    public ProducerConsumerGUI() {
+        setTitle("Problema Produtor-Consumidor");
+        setSize(700, 400);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        setupControls();
+        setupBufferDisplay();
+
+        setVisible(true);
+    }
+
+    private void setupControls() {
+        JPanel controlPanel = new JPanel();
+        controlPanel.setLayout(new GridLayout(4, 2));
+
+        // Tamanho do buffer
+        controlPanel.add(new JLabel("Tamanho do Buffer:"));
+        bufferSizeField = new JTextField(String.valueOf(bufferSize));
+        controlPanel.add(bufferSizeField);
+
+        // Velocidade do produtor
+        controlPanel.add(new JLabel("Velocidade do Produtor (ms):"));
+        producerSpeedSlider = new JSlider(100, 2000, producerSpeed);
+        producerSpeedSlider.setMajorTickSpacing(500);
+        producerSpeedSlider.setPaintTicks(true);
+        producerSpeedSlider.setPaintLabels(true);
+        controlPanel.add(producerSpeedSlider);
+
+        // Velocidade do consumidor
+        controlPanel.add(new JLabel("Velocidade do Consumidor (ms):"));
+        consumerSpeedSlider = new JSlider(100, 2000, consumerSpeed);
+        consumerSpeedSlider.setMajorTickSpacing(500);
+        consumerSpeedSlider.setPaintTicks(true);
+        consumerSpeedSlider.setPaintLabels(true);
+        controlPanel.add(consumerSpeedSlider);
+
+        // Botões
+        startButton = new JButton("Iniciar");
+        stopButton = new JButton("Parar");
+        stopButton.setEnabled(false);
+
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.add(startButton);
+        buttonPanel.add(stopButton);
+
+        // Ações dos botões
+        startButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                startSimulation();
+                startButton.setEnabled(false);
+                stopButton.setEnabled(true);
+            }
+        });
+
+        stopButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                stopSimulation();
+                startButton.setEnabled(true);
+                stopButton.setEnabled(false);
+            }
+        });
+
+        add(controlPanel, BorderLayout.NORTH);
+        add(buttonPanel, BorderLayout.SOUTH);
+    }
+
+    private void setupBufferDisplay() {
+        bufferPanel = new JPanel();
+        bufferPanel.setLayout(new GridLayout(1, bufferSize));
+        bufferSlots = new JLabel[bufferSize];
+        for (int i = 0; i < bufferSize; i++) {
+            bufferSlots[i] = new JLabel("", SwingConstants.CENTER);
+            bufferSlots[i].setBorder(BorderFactory.createLineBorder(Color.BLACK));
+            bufferSlots[i].setOpaque(true);
+            bufferSlots[i].setBackground(Color.WHITE);
+            bufferPanel.add(bufferSlots[i]);
+        }
+        add(bufferPanel, BorderLayout.CENTER);
+    }
+
+    public void refreshBufferDisplay() {
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                int[] currentBuffer = buffer.getBufferState();
+                int count = buffer.getCount();
+                for (int i = 0; i < bufferSize; i++) {
+                    if (i < count) {
+                        bufferSlots[i].setText(String.valueOf(currentBuffer[i]));
+                        bufferSlots[i].setBackground(Color.GREEN);
+                    } else {
+                        bufferSlots[i].setText("");
+                        bufferSlots[i].setBackground(Color.WHITE);
+                    }
+                }
+            }
+        });
+    }
+
+    private void startSimulation() {
+        try {
+            bufferSize = Integer.parseInt(bufferSizeField.getText());
+            if (bufferSize <= 0) throw new NumberFormatException();
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Tamanho do buffer inválido");
+            return;
+        }
+
+        producerSpeed = producerSpeedSlider.getValue();
+        consumerSpeed = consumerSpeedSlider.getValue();
+
+        buffer = new BoundedBuffer(bufferSize);
+        producer = new Producer(buffer, producerSpeed, this);
+        consumer = new Consumer(buffer, consumerSpeed, this);
+
+        producerThread = new Thread(producer);
+        consumerThread = new Thread(consumer);
+
+        bufferPanel.removeAll();
+        bufferPanel.setLayout(new GridLayout(1, bufferSize));
+        bufferSlots = new JLabel[bufferSize];
+        for (int i = 0; i < bufferSize; i++) {
+            bufferSlots[i] = new JLabel("", SwingConstants.CENTER);
+            bufferSlots[i].setBorder(BorderFactory.createLineBorder(Color.BLACK));
+            bufferSlots[i].setOpaque(true);
+            bufferSlots[i].setBackground(Color.WHITE);
+            bufferPanel.add(bufferSlots[i]);
+        }
+        bufferPanel.revalidate();
+        bufferPanel.repaint();
+
+        producerThread.start();
+        consumerThread.start();
+    }
+
+    private void stopSimulation() {
+        producer.stop();
+        consumer.stop();
+        producerThread.interrupt();
+        consumerThread.interrupt();
+    }
+
+    public static void main(String[] args) {
+        new ProducerConsumerGUI();
+    }
+}

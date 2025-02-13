@@ -1,0 +1,122 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+import java.net.*;
+
+public class Consumer extends JFrame {
+    private JButton startButton;
+    private JButton stopButton;
+    private JTextArea logArea;
+    private volatile boolean running = false;
+    private ServerSocket serverSocket;
+    private Socket clientSocket;
+    private BufferedReader in;
+    private Thread consumerThread;
+
+    public Consumer() {
+        setTitle("Consumidor");
+        setSize(400, 300);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        startButton = new JButton("Iniciar Consumo");
+        stopButton = new JButton("Parar Consumo");
+        stopButton.setEnabled(false);
+
+        JPanel panel = new JPanel();
+        panel.add(startButton);
+        panel.add(stopButton);
+        add(panel, BorderLayout.NORTH);
+
+        logArea = new JTextArea();
+        logArea.setEditable(false);
+        add(new JScrollPane(logArea), BorderLayout.CENTER);
+
+        startButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                startConsumption();
+            }
+        });
+
+        stopButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                stopConsumption();
+            }
+        });
+
+        setVisible(true);
+    }
+
+    private void startConsumption() {
+        try {
+            serverSocket = new ServerSocket(5000);
+            logArea.append("Aguardando conexão do produtor...\n");
+
+            // Aceita a conexão em um novo thread para não bloquear a GUI
+            new Thread(() -> {
+                try {
+                    clientSocket = serverSocket.accept();
+                    logArea.append("Produtor conectado.\n");
+
+                    in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                    running = true;
+
+                    consumerThread = new Thread(() -> {
+                        try {
+                            String message;
+                            while (running && (message = in.readLine()) != null) {
+                                logArea.append("Consumido: " + message + "\n");
+                            }
+                        } catch (IOException e) {
+                            if (running) {
+                                e.printStackTrace();
+                            }
+                        }
+                    });
+                    consumerThread.start();
+                } catch (IOException e) {
+                    if (running) {
+                        e.printStackTrace();
+                    }
+                }
+            }).start();
+
+            startButton.setEnabled(false);
+            stopButton.setEnabled(true);
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Erro ao iniciar o servidor.", "Erro", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void stopConsumption() {
+        running = false;
+        try {
+            if (consumerThread != null) {
+                consumerThread.interrupt();
+                consumerThread = null;
+            }
+            if (in != null) {
+                in.close();
+                in = null;
+            }
+            if (clientSocket != null) {
+                clientSocket.close();
+                clientSocket = null;
+            }
+            if (serverSocket != null) {
+                serverSocket.close();
+                serverSocket = null;
+            }
+            logArea.append("Consumo parado.\n");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        startButton.setEnabled(true);
+        stopButton.setEnabled(false);
+    }
+
+    public static void main(String[] args) {
+        new Consumer();
+    }
+}

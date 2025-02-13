@@ -1,0 +1,204 @@
+package projeto;
+
+public class teste {
+
+	public static void main(String[] args) {
+		import javax.swing.*;
+		import java.awt.*;
+		import java.awt.event.ActionEvent;
+		import java.awt.event.ActionListener;
+
+		class Buffer {
+		    private final java.util.List<Integer> buffer = new java.util.LinkedList<>();
+		    private final int maxSize;
+
+		    public Buffer(int size) {
+		        this.maxSize = size;
+		    }
+
+		    public synchronized void produzir(int valor) throws InterruptedException {
+		        while (buffer.size() == maxSize) {
+		            wait();
+		        }
+		        buffer.add(valor);
+		        notifyAll();
+		    }
+
+		    public synchronized int consumir() throws InterruptedException {
+		        while (buffer.isEmpty()) {
+		            wait();
+		        }
+		        int valor = buffer.remove(0);
+		        notifyAll();
+		        return valor;
+		    }
+
+		    public synchronized int getSize() {
+		        return buffer.size();
+		    }
+
+		    public int getMaxSize() {
+		        return maxSize;
+		    }
+		}
+
+		class Produtor implements Runnable {
+		    private final Buffer buffer;
+		    private final int velocidade;
+		    private final JLabel statusLabel;
+
+		    public Produtor(Buffer buffer, int velocidade, JLabel statusLabel) {
+		        this.buffer = buffer;
+		        this.velocidade = velocidade;
+		        this.statusLabel = statusLabel;
+		    }
+
+		    public void run() {
+		        int valor = 0;
+		        try {
+		            while (true) {
+		                Thread.sleep(velocidade);
+		                buffer.produzir(valor);
+		                statusLabel.setText("Produziu: " + valor);
+		                valor++;
+		            }
+		        } catch (InterruptedException e) {
+		            Thread.currentThread().interrupt();
+		        }
+		    }
+		}
+
+		class Consumidor implements Runnable {
+		    private final Buffer buffer;
+		    private final int velocidade;
+		    private final JLabel statusLabel;
+
+		    public Consumidor(Buffer buffer, int velocidade, JLabel statusLabel) {
+		        this.buffer = buffer;
+		        this.velocidade = velocidade;
+		        this.statusLabel = statusLabel;
+		    }
+
+		    public void run() {
+		        try {
+		            while (true) {
+		                Thread.sleep(velocidade);
+		                int valor = buffer.consumir();
+		                statusLabel.setText("Consumiu: " + valor);
+		            }
+		        } catch (InterruptedException e) {
+		            Thread.currentThread().interrupt();
+		        }
+		    }
+		}
+
+		public class ProdutorConsumidorGUI extends JFrame {
+		    private Thread threadProdutor;
+		    private Thread threadConsumidor;
+		    private Buffer buffer;
+		    private final JLabel bufferStatus = new JLabel("Buffer: 0");
+		    private final JLabel produtorStatus = new JLabel("Produtor pronto");
+		    private final JLabel consumidorStatus = new JLabel("Consumidor pronto");
+
+		    public ProdutorConsumidorGUI() {
+		        setTitle("Problema Produtor-Consumidor");
+		        setSize(400, 300);
+		        setDefaultCloseOperation(EXIT_ON_CLOSE);
+		        initComponents();
+		    }
+
+		    private void initComponents() {
+		        // Componentes para ajustar parâmetros
+		        JSlider velocidadeProdutorSlider = new JSlider(100, 2000, 1000);
+		        JSlider velocidadeConsumidorSlider = new JSlider(100, 2000, 1000);
+		        JSpinner tamanhoBufferSpinner = new JSpinner(new SpinnerNumberModel(5, 1, 20, 1));
+
+		        // Labels
+		        JLabel velocidadeProdutorLabel = new JLabel("Velocidade Produtor (ms):");
+		        JLabel velocidadeConsumidorLabel = new JLabel("Velocidade Consumidor (ms):");
+		        JLabel tamanhoBufferLabel = new JLabel("Tamanho do Buffer:");
+
+		        // Botões
+		        JButton iniciarButton = new JButton("Iniciar");
+		        JButton pararButton = new JButton("Parar");
+
+		        // Painel de controle
+		        JPanel controlPanel = new JPanel();
+		        controlPanel.setLayout(new GridLayout(7, 2));
+		        controlPanel.add(velocidadeProdutorLabel);
+		        controlPanel.add(velocidadeProdutorSlider);
+		        controlPanel.add(velocidadeConsumidorLabel);
+		        controlPanel.add(velocidadeConsumidorSlider);
+		        controlPanel.add(tamanhoBufferLabel);
+		        controlPanel.add(tamanhoBufferSpinner);
+		        controlPanel.add(iniciarButton);
+		        controlPanel.add(pararButton);
+		        controlPanel.add(new JLabel("Status do Buffer:"));
+		        controlPanel.add(bufferStatus);
+		        controlPanel.add(new JLabel("Status do Produtor:"));
+		        controlPanel.add(produtorStatus);
+		        controlPanel.add(new JLabel("Status do Consumidor:"));
+		        controlPanel.add(consumidorStatus);
+
+		        add(controlPanel);
+
+		        // Ações dos botões
+		        iniciarButton.addActionListener(new ActionListener() {
+		            public void actionPerformed(ActionEvent e) {
+		                int velocidadeProdutor = velocidadeProdutorSlider.getValue();
+		                int velocidadeConsumidor = velocidadeConsumidorSlider.getValue();
+		                int tamanhoBuffer = (int) tamanhoBufferSpinner.getValue();
+
+		                buffer = new Buffer(tamanhoBuffer);
+
+		                threadProdutor = new Thread(new Produtor(buffer, velocidadeProdutor, produtorStatus));
+		                threadConsumidor = new Thread(new Consumidor(buffer, velocidadeConsumidor, consumidorStatus));
+
+		                threadProdutor.start();
+		                threadConsumidor.start();
+
+		                // Atualiza o status do buffer periodicamente
+		                Timer timer = new Timer(500, new ActionListener() {
+		                    public void actionPerformed(ActionEvent evt) {
+		                        bufferStatus.setText("Buffer: " + buffer.getSize() + "/" + buffer.getMaxSize());
+		                    }
+		                });
+		                timer.start();
+
+		                iniciarButton.setEnabled(false);
+		                pararButton.setEnabled(true);
+		            }
+		        });
+
+		        pararButton.addActionListener(new ActionListener() {
+		            public void actionPerformed(ActionEvent e) {
+		                if (threadProdutor != null && threadConsumidor != null) {
+		                    threadProdutor.interrupt();
+		                    threadConsumidor.interrupt();
+		                    threadProdutor = null;
+		                    threadConsumidor = null;
+		                    buffer = null;
+		                    bufferStatus.setText("Buffer: 0");
+		                    produtorStatus.setText("Produtor parado");
+		                    consumidorStatus.setText("Consumidor parado");
+		                    iniciarButton.setEnabled(true);
+		                    pararButton.setEnabled(false);
+		                }
+		            }
+		        });
+
+		        pararButton.setEnabled(false);
+		    }
+
+		    public static void main(String[] args) {
+		        SwingUtilities.invokeLater(() -> {
+		            ProdutorConsumidorGUI gui = new ProdutorConsumidorGUI();
+		            gui.setVisible(true);
+		        });
+		    }
+		}
+
+
+	}
+
+}

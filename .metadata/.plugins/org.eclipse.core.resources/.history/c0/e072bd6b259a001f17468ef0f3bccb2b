@@ -1,0 +1,22 @@
+package projeto2;
+
+public class Producer implements Runnable {
+    private Buffer buffer;
+
+    public Producer(Buffer buffer) {
+        this.buffer = buffer;
+    }
+
+    public void run() {
+        int i = 0;
+        while (true) {
+            try {
+                buffer.produzir(i++);
+                Thread.sleep((int)(Math.random() * 1000));
+            } catch (InterruptedException e) {
+                break;
+            }
+        }
+    }
+}
+

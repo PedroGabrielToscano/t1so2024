@@ -1,0 +1,21 @@
+package projeto2;
+
+public class Consumer implements Runnable {
+    private Buffer buffer;
+
+    public Consumer(Buffer buffer) {
+        this.buffer = buffer;
+    }
+
+    public void run() {
+        while (true) {
+            try {
+                int data = buffer.consumir();
+                Thread.sleep((int)(Math.random() * 1000));
+            } catch (InterruptedException e) {
+                break;
+            }
+        }
+    }
+}
+
